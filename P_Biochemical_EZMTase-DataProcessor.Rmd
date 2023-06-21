@@ -1,0 +1,203 @@
+---
+title: "EZ-MTase Processor"
+author: "Jacob Roth"
+date: "2023-06-16"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r Load Packages}
+library(readxl)
+library(tidyr)
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+library(stringr)
+```
+
+```{r housekeeping}
+
+#store todays date in YYYYMMDDD format
+date <- format(ymd(today()), "%Y%m%d")
+
+#Set colors for PRMTi that are homogenous throughout the lab 
+DMSO_color <- '#d4d4d4'
+GSK_color <- '#008837'
+MS023_color <- '#7b3294'
+
+
+```
+
+```{r Read Data}
+data_MTase <- read_excel('2-data_raw/20230613_JSRe0097_MTaseAssay-PRMTActivity.xlsx')
+# data_MTase16 <- read_excel('2-data_raw/20230616_JSRe0097_MTaseAssay-PRMTActivity.xlsx')
+# data_MTase20 <- read_excel('2-data_raw/20230620_JSRe0097_MTaseAssay-PRMTActivity.xlsx')
+
+
+```
+
+```{r Clean Data}
+
+# data_MTaseWide <- pivot_wider(data_MTase,
+#             names_from = [2:98],
+#             values_from = Time)
+
+data_MTaseLong <- data_MTase %>% 
+  pivot_longer(
+    cols = 3:98,
+    names_to = "sample",
+    # names_from = [2:98],
+    values_to = "A263")
+
+data_MTaseLong <- data_MTaseLong[!is.na(data_MTaseLong$A263),]
+# data_MTaseLong$Time <- format(data_MTase2$Time, '%H%M%S')
+# data_MTaseLong$Time <- format(data_MTase2$Time, '%H%M')
+
+#convert time column to aggregated seconds
+# g.gantt$date <- format(g.gantt$date,"%YYYY-%MM-%DD")
+# g.gantt[,6] <- as.POSIXct(g.gantt[,6], format="%Y-%m-%d", tz="EST")
+
+data_MTaseLong$seconds <- data_MTaseLong$Time - data_MTaseLong$Time[1]
+data_MTaseLong$seconds <- as.numeric(data_MTaseLong$seconds, units="secs")
+
+
+#Split label colummn
+# data_MTase <- data_MTase %>% separate_wider_delim(split, delim = "_",
+#                                                   names = c("sample","sgRNA","dilution"),
+#                                                   too_few = c("align_start")
+#                                                   )
+```
+
+```{r Read Platemap}
+
+map_MTase <- read_excel('2-data_raw/20230613_JSRe0097_MTaseAssay-Platemap.xlsx')
+# map_MTase16 <- read_excel('2-data_raw/20230616_JSRe0097_MTaseAssay-Platemap.xlsx')
+# map_MTase20 <- read_excel('2-data_raw/20230620_JSRe0097_MTaseAssay-Platemap.xlsx')
+```
+
+```{r Clean Platemaps}
+
+#remove sticky "__" from the condition column
+# map_MTase1 <- gsub("__","","text")
+library(stringr)
+map_MTase$condition <- str_replace_all(map_MTase$condition, "__", "")
+map_MTase <- map_MTase[!(is.na(map_MTase$condition) | map_MTase$condition==""), ]
+
+# map_MTase16$condition <- str_replace_all(map_MTase16$condition, "__", "")
+# map_MTase16 <- map_MTase16[!(is.na(map_MTase16$condition) | map_MTase16$condition==""), ]
+# 
+# map_MTase20$condition <- str_replace_all(map_MTase20$condition, "__", "")
+# map_MTase20 <- map_MTase20[!(is.na(map_MTase20$condition) | map_MTase20$condition==""), ]
+
+```
+
+```{r Joyous Union of data and platemap}
+
+merge <- left_join(data_MTaseLong,
+          map_MTase,
+          by = "sample")
+
+merge <- merge[!is.na(merge$condition),]
+
+merge$treatment <- paste("SAM-",merge$sam,"_Peptide-",merge$peptide,
+                         sep="")
+# merge <- separate(data = merge, col = condition, 
+#          into = c("condition", "treatment"), sep = "_")
+
+
+```
+
+```{r define colors}
+# unique(data_MTaseLong$treatment)
+#https://personal.sron.nl/~pault/
+cols <- c("NoPeptide" = "#88CCEE",
+            "NoSAM" = "#999933",
+            "NoEnzyme" = "#44AA99",
+            "50uM-Peptide" = "#882255",
+          "25uM-Peptide" = "#AA4499",
+            "10uM-Peptide" = "#CC6677")
+
+cols2 <- c("SAM-100_Peptide-0" = "#88CCEE",
+            "SAM-0_Peptide-25" = "#999933",
+           "SAM-0_Peptide-10" = "#999933",
+            "NoEnzyme" = "#44AA99",
+            "SAM-100_Peptide-50" = "#882255",
+          "SAM-100_Peptide-25" = "#AA4499",
+            "SAM-100_Peptide-10" = "#CC6677")
+
+
+
+```
+
+```{r Practice with offline processed data, eval= FALSE}
+# data_MTase1 <- read_excel('4-data_processed/20230613_JSRe0097_MTaseAssay-PRMTActivity_processed.xlsx',
+#                           sheet = "data")
+# 
+# data_MTaseLong <- data_MTase1 %>% 
+#   pivot_longer(
+#     cols = 3:17,
+#     names_to = "sample",
+#     # names_from = [2:98],
+#     values_to = "A263")
+# data_MTaseLong <- separate(data = data_MTaseLong, col = sample, 
+#          into = c("sample", "treatment"), sep = "_")
+
+```
+
+```{r Visualize Relative expression}
+plot_MTase <- merge %>%
+  # filter(id_target == "SNRPB_e6e7_i108-i109" | 
+  #          id_target == "SNRPD1_e4e4_i114-i115" | 
+  #          id_target == "SNRPD3_e3e3_i120-i121") %>%
+  # filter(sample == "SmB" | 
+  #          sample == "SmD1" | 
+  #          sample == "SmD3") %>%
+ggplot(aes(x=seconds,
+           y=A263,
+           color=treatment))+
+  scale_color_manual(values = cols2)+
+  # geom_hline(yintercept = 0, linetype="dashed", 
+  #               color = "black", size=0.5,alpha=0.5)+
+  # geom_hline(yintercept = 1, linetype="dashed", 
+  #               color = "black", size=0.5,alpha=0.5)+
+  geom_jitter(width=0.2,
+           size=0.2)+
+  facet_wrap(.~enzyme) +
+  theme_bw()+
+  ylim(0.85, 1.1)+
+  theme(axis.text.x = element_text(angle = 90))+
+    labs(title = "JSRe0097: EZ-MTase Assay",
+       subtitle = "20230620; Test Subray's new PRMT enzymes",
+       x ="Time (seconds)", y = "A263",
+       caption = "")+ 
+theme(legend.position = "right",
+        # axis.text.y   = element_text(size=12, colour = "black",angle = 45, vjust = 1, hjust=1),
+        axis.text.x   = element_text(size=8, colour = "black",angle = 45, vjust = 1, hjust=1),
+      # axis.text.x   = element_blank(),
+        axis.title.y  = element_text(size=12, colour = "black"),
+        axis.title.x  = element_text(size=12, colour = "black"),
+      axis.ticks = element_blank(),
+        # panel.background = element_blank(),
+        # panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        axis.line = element_line(colour = "black"),
+      # panel.border = element_rect(colour = "black", fill=NA, size=1),
+      )
+
+plot_MTase
+```
+
+
+```{r Visualize Relative expression}
+ggsave(plot = plot_MTase,
+       path = "5-figures",
+       filename = paste(date,"_JSRe0097-R_RecombinantPRMT-EnzymeEZ-MTaseAssay-20230620-2",".pdf",sep = ""),
+       height = 6, width = 8)
+
+```
